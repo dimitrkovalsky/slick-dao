@@ -68,3 +68,30 @@ And than you can use common DAO operation in simple way :
  for (obj <- dao.findPage(1, 10))
    println(obj)
 ```
+
+<h1>Generator example </h1>
+To generare dao create generator with params : ```Table name, folder for generated code, packege,Dao name```
+```
+val generator = Generators.createGenerator("person", "src/main/scala", "dao", "PersonDao")
+generator.generateDao(updateFactory = true)
+generator.generateUnitTest()
+```
+
+To unit-tests generation use ```generator.generateUnitTest()``` it generate unit test in  src / test/folder for generated code/ packege folder
+
+```
+package dao
+
+import org.junit.Assert._
+import org.junit.Test
+
+class PersonDaoTest {
+  @Test def verifyFindAll() {
+    val dao = DaoFactory.getPersonDao
+    val count = dao.count
+    assertEquals(count, dao.findAll().size)
+  }
+}
+```
+
+
