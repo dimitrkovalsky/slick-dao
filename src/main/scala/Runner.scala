@@ -1,4 +1,5 @@
-import dao.Employee
+import dao.{DaoFactory, Employee}
+import scala.slick.dao.Generators
 
 /**
  * User: Dimitr
@@ -8,11 +9,11 @@ import dao.Employee
 object Runner {
   def main(args: Array[String]) {
 
-    val dao = DaoFactory.getEmployeeDao
-
-    dao.insert(Employee("Simple", "simple@mail.com", Some("Some note")))
-
-    for (obj <- dao.findPage(1, 10))
-      println(obj)
+    val generator = Generators.getGenerator
+    generator.generate("person", "src/main/scala", "dao", "PersonDao", updateFactory = true)
+//    val dao = DaoFactory.getPersonDao
+//
+//    for (obj <- dao.findPage(1, 10))
+//      println(obj)
   }
 }
