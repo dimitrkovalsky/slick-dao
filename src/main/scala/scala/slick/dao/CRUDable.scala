@@ -12,7 +12,7 @@ import DBConnection.profile.simple._
  * @tparam K Primary key
  */
 trait CRUDable[T <: AbstractTable[_], K] extends Insertable[T] with Searchable[T, K]
-                     with Updatable[T, K] with Removable[T, K] with Selectable[T, K]
+with Updatable[T, K] with Removable[T, K] with Selectable[T, K]
 
 sealed trait Requestable[T <: AbstractTable[_]] extends Profile {
   val entities: TableQuery[T]
@@ -86,6 +86,10 @@ trait Searchable[T <: AbstractTable[_], K] extends Requestable[T] {
 
   def findById(id: K): T#TableElementType = {
     selectById(id).first()
+  }
+
+  def count: Int = {
+    Query(entities.length).first()
   }
 
 }

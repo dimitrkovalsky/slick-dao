@@ -15,32 +15,52 @@ object Generators {
 
   private implicit def session = DBConnection.databasePool.createSession()
 
-  def getGenerator = new Generator()
+  def createGenerator(tableName: String, folder: String, packag: String, daoClass: String) =
+    new Generator(tableName, folder, packag, daoClass)
 
-  class Generator() {
+  class Generator(tableName: String, folder: String, packag: String, daoClass: String) {
 
     import scala.slick.jdbc.meta.createModel
 
-    def generate(tableName: String, folder: String, packag: String, daoClass: String,
-                 updateFactory: Boolean = false, factoryPath: Option[String] = None) {
+    def generateDao(updateFactory: Boolean = false, factoryPath: Option[String] = None) {
       val mTable = MTable(MQName(None, Some(scheme), tableName), "TABLE", null, None, None, None)
       val model = createModel(Seq(mTable), DBConnection.profile)
       val codeGen = new DaoSourceGenerator(model)
       writeToFile(codeGen, folder, packag, daoClass)
 
       def updateDaoFactory() {
-
         val fileName = factoryPath.getOrElse(s"$folder/$packag/DaoFactory.scala")
         val lines = Source.fromFile(fileName).getLines().toList
         val string = s"  def get$daoClass: I$daoClass = new $daoClass()\n}"
         val result = lines.slice(0, lines.size - 1).mkString("\n") :: string :: Nil
-        val writer = new FileWriter(fileName)
-        writer.write(result.mkString("\n"))
-        writer.close()
-
+        writeResult(fileName, result.mkString("\n"))
       }
       if (updateFactory)
         updateDaoFactory()
+    }
+
+    private def writeResult(path: String, data: String) {
+      val writer = new FileWriter(path)
+      writer.write(data)
+      writer.close()
+    }
+
+    def generateUnitTest(factoryPath: Option[String] = None) {
+      val factory = factoryPath.getOrElse(s"$folder/$packag/DaoFactory.scala")
+      val test = s"""package $packag
+
+import org.junit.Assert._
+import org.junit.Test
+
+class ${daoClass}Test {
+  @Test def verifyFindAll() {
+    val dao = DaoFactory.get${daoClass}
+    val count = dao.count
+    assertEquals(count, dao.findAll().size)
+  }
+}
+"""
+      writeResult(s"${folder.replace("main", "test")}/$packag/${daoClass}Test.scala", test)
     }
 
     def writeToFile(generator: DaoSourceGenerator, folder: String, packag: String, daoClass: String) {
@@ -62,11 +82,10 @@ object Generators {
   }
 }"""
       builder ++= daoCode
-      val writer = new FileWriter(s"$folder/$packag/${generator.entity}.scala")
-      writer.write(builder.toString())
-      writer.close()
+      writeResult(s"$folder/$packag/${generator.entity}.scala", builder.toString())
     }
   }
+
 }
 
 class DaoSourceGenerator(model: Model) extends SourceCodeGenerator(model) {
