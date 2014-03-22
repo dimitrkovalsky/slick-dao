@@ -11,6 +11,7 @@ object Runner {
 
     val generator = Generators.createGenerator("person", "src/main/scala", "dao", "PersonDao")
     generator.generateDao(updateFactory = true)
-    generator.generateUnitTest()
+
+   // generator.generateUnitTest()
   }
 }

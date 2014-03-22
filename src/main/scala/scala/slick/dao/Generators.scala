@@ -28,15 +28,14 @@ object Generators {
       val codeGen = new DaoSourceGenerator(model)
       writeToFile(codeGen, folder, packag, daoClass)
 
-      def updateDaoFactory() {
+      if (updateFactory) {
         val fileName = factoryPath.getOrElse(s"$folder/$packag/DaoFactory.scala")
         val lines = Source.fromFile(fileName).getLines().toList
         val string = s"  def get$daoClass: I$daoClass = new $daoClass()\n}"
         val result = lines.slice(0, lines.size - 1).mkString("\n") :: string :: Nil
         writeResult(fileName, result.mkString("\n"))
       }
-      if (updateFactory)
-        updateDaoFactory()
+
     }
 
     private def writeResult(path: String, data: String) {
@@ -45,34 +44,19 @@ object Generators {
       writer.close()
     }
 
-    def generateUnitTest(factoryPath: Option[String] = None) {
-      val factory = factoryPath.getOrElse(s"$folder/$packag/DaoFactory.scala")
-      val test = s"""package $packag
-
-import org.junit.Assert._
-import org.junit.Test
-
-class ${daoClass}Test {
-  @Test def verifyFindAll() {
-    val dao = DaoFactory.get${daoClass}
-    val count = dao.count
-    assertEquals(count, dao.findAll().size)
-  }
-}
-"""
-      writeResult(s"${folder.replace("main", "test")}/$packag/${daoClass}Test.scala", test)
-    }
 
     def writeToFile(generator: DaoSourceGenerator, folder: String, packag: String, daoClass: String) {
-      val builder = new StringBuilder
-      builder.append(s"package $packag\n")
-      builder.append("import scala.slick.dao.DBConnection.profile.simple._\n")
-      builder.append("import scala.slick.dao._\n")
-      builder.append(generator.code)
-      builder ++= s"\n\ntrait I$daoClass extends AbstractDAO with CRUDable[${generator.table}, ${generator.pkType}]\n\n"
-      val daoCode = s"""class $daoClass(implicit innerSession: Session) extends I$daoClass {
+      val code = s"""package $packag
+import scala.slick.dao.DBConnection.profile.simple._
+import scala.slick.dao._
+${generator.code}
 
-  val entities: TableQuery[${generator.table}] = TableQuery[${generator.table}]\n
+trait I$daoClass extends AbstractDAO with CRUDable[${generator.table}, ${generator.pkType}]
+
+class $daoClass(implicit innerSession: Session) extends I$daoClass {
+
+  val entities: TableQuery[${generator.table}] = TableQuery[${generator.table}]
+
   def selectBy(entity: ${generator.entity}) = {
     for (e <- entities if e.${generator.pkName} === entity.${generator.pkName}) yield e
   }
@@ -81,68 +65,63 @@ class ${daoClass}Test {
     for (e <- entities if e.${generator.pkName} === id) yield e
   }
 }"""
-      builder ++= daoCode
-      writeResult(s"$folder/$packag/${generator.entity}.scala", builder.toString())
+      writeResult(s"$folder/$packag/${generator.entity}.scala", code)
     }
   }
 
-}
+  class DaoSourceGenerator(model: Model) extends SourceCodeGenerator(model) {
+    // need for DAO generation
+    var table: String = _
+    var entity: String = _
+    var pkName: String = _
+    var pkType: String = _
 
-class DaoSourceGenerator(model: Model) extends SourceCodeGenerator(model) {
-  var table: String = _
-  var entity: String = _
-  var pkName: String = _
-  var pkType: String = _
+    // override mapped table and class name
+    override def entityName =
+      dbTableName => {
+        entity = dbTableName.toLowerCase.toCamelCase
+        entity
+      }
+    override def tableName =
+      dbTableName => {
+        table = dbTableName.toLowerCase.toCamelCase + "s"
+        table
+      }
 
-  // override mapped table and class name
-  override def entityName =
-    dbTableName => {
-      entity = dbTableName.toLowerCase.toCamelCase
-      entity
-    }
+    // remove ForeignKeyAction import
+    override def code = super.code.substring(super.code.indexOf("\n"))
 
-  override def tableName =
-    dbTableName => {
-      table = dbTableName.toLowerCase.toCamelCase + "s"
-      table
-    }
+    // override table generator
+    override def Table = new Table(_) {
 
-  // add some custom import
-  override def code = super.code.substring(super.code.indexOf("\n"))
+      override def PlainSqlMapper = new PlainSqlMapper {
+        override def enabled: Boolean = false
+      }
 
-  // override table generator
-  override def Table = new Table(_) {
-    // disable entity class generation and mapping
-    override def EntityType = new EntityType {
-      override def classEnabled = true
-    }
+      override def TableValue = new TableValue {
+        override def enabled: Boolean = false
+      }
 
-    override def PlainSqlMapper = new PlainSqlMapperDef {
-      override def enabled: Boolean = false
-    }
+      override def Index = new Index(_) {
+        override def enabled: Boolean = false
+      }
 
-    override def TableValue = new TableValueDef {
-      override def enabled: Boolean = false
-    }
+      override def TableClass = new TableClass {
+        override def optionEnabled: Boolean = false
+      }
 
-    override def Index = new Index(_) {
-      override def enabled: Boolean = false
-    }
-
-    override def TableClass = new TableClassDef {
-      override def optionEnabled: Boolean = false
-    }
-
-    // override contained column generator
-    override def Column = new Column(_) {
-      // use the data model member of this column to change the Scala type, e.g. to a custom enum or anything else
-      override def rawType = {
-        if (model.options.contains(ColumnOption.PrimaryKey)) {
-          pkName = super.rawName
-          pkType = super.rawType.toString
+      // override contained column generator
+      override def Column = new Column(_) {
+        // use the data model member of this column to change the Scala type, e.g. to a custom enum or anything else
+        override def rawType = {
+          if (model.options.contains(ColumnOption.PrimaryKey)) {
+            pkName = super.rawName
+            pkType = super.rawType.toString
+          }
+          super.rawType
         }
-        super.rawType
       }
     }
   }
+
 }
